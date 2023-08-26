@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8' />
+    <title>webcam-receiver</title>
+    <link rel="shortcut icon"  type="image/x-icon" href="/favicon.ico" />
+
+
+    <style>
+*,
+  * > * {
+    user-select: none;
+  }
+
+  body, html {
+    background-color: black;
+  }
+
+  body {
+    display: none;
+  }
+
+  video {
+    position: fixed;
+    inset: 0;
+    height: 100%;
+    width: 100%;
+  }
+
+  video::-webkit-media-controls {
+    display: none !important;
+  }
+
+  #controls {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+  }
+
+  button {
+    transition: all linear 500ms;
+    height: 32px;
+    width: 32px;
+    padding: 0;
+    border-radius: max(100vw, 100vh);
+    outline: transparent;
+    border: transparent;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  #stop {
+    display: none;
+  }
+
+  #recording-time {
+    z-index: -1;
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translate(-10px, -50%);
+    background-color: white;
+    padding: 5px;
+    padding-left: 15px;
+    border-radius: 0 20px 20px 0;
+  }
+
+  #recording-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background-color: red;
+    display: none;
+    opacity: 0;
+    animation: blink 3s infinite;
+  }
+
+  @keyframes blink {
+    0% {
+      opacity: 0;
+    }
+    25% {
+      opacity: 1;
+    }
+    75% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  path {
+    fill: red;
+  }
+    </style>
+  </head>
+
+  <body>
+    <video autoplay id='video'></video>
+    <div id='controls'>
+      <button type='button' id='record'>
+        <svg
+          width='32'
+          height='32'
+          viewBox='0 0 32 32'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
+          >
+          <path
+          d='M16 20.6667C18.5774 20.6667 20.6667 18.5773 20.6667 16C20.6667 13.4227 18.5774 11.3333 16 11.3333C13.4227 11.3333 11.3334 13.4227 11.3334 16C11.3334 18.5773 13.4227 20.6667 16 20.6667Z'
+          fill='#F5F5F5'
+          />
+          <path
+          fill-rule='evenodd'
+          clip-rule='evenodd'
+          d='M26.6667 16C26.6667 21.891 21.8911 26.6667 16 26.6667C10.109 26.6667 5.33337 21.891 5.33337 16C5.33337 10.109 10.109 5.33333 16 5.33333C21.8911 5.33333 26.6667 10.109 26.6667 16ZM24 16C24 20.4183 20.4183 24 16 24C11.5818 24 8.00004 20.4183 8.00004 16C8.00004 11.5817 11.5818 7.99999 16 7.99999C20.4183 7.99999 24 11.5817 24 16Z'
+          fill='#F5F5F5'
+          />
+        </svg>
+      </button>
+      <button type='button' id='stop'>
+        <svg
+          width='32'
+          height='32'
+          viewBox='0 0 32 32'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
+          >
+          <path
+          d='M8.66667 8C8.29848 8 8 8.29848 8 8.66667V23.3333C8 23.7015 8.29848 24 8.66667 24H23.3333C23.7015 24 24 23.7015 24 23.3333V8.66667C24 8.29848 23.7015 8 23.3333 8H8.66667Z'
+          fill='#F5F5F5'
+          />
+        </svg>
+          <span id='recording-time'></span>
+      </button>
+    </div>
+    <span id='recording-indicator'></span>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const video = document.querySelector('#video')
+        const controls = document.querySelector('#controls')
+        const record = document.querySelector('#record')
+        const stop = document.querySelector('#stop')
+        const recordingTime = document.querySelector('#recording-time')
+        const recordingIndicator = document.querySelector(
+          '#recording-indicator',
+        )
+
+        let startTime
+        let timeInterval
+        recordingTime.innerHTML = formatTime(0)
+
+        function formatTime(seconds) {
+          const minutes = Math.floor(seconds / 60)
+          const remainingSeconds = seconds % 60
+          return `${minutes
+              .toString()
+              .padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
+        }
+
+        if (navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices
+            .getUserMedia({ video: true })
+            .then(function(stream) {
+              video.srcObject = stream
+              const mediaRecorder = new MediaRecorder(stream)
+
+              document.body.style.setProperty('display', 'block')
+
+              const chunks = []
+
+              mediaRecorder.addEventListener('dataavailable', (event) => {
+                chunks.push(event.data)
+              })
+
+              mediaRecorder.addEventListener('stop', () => {
+                if (confirm("Download recording?")) {
+                  const videoBlob = new Blob(chunks, { type: 'video/webm' })
+
+                  const downloadLink = document.createElement('a')
+                  downloadLink.href = URL.createObjectURL(videoBlob)
+                  downloadLink.download = `flight-${new Date()
+                      .toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                      })
+                      .split('/')
+                      .reverse()
+                      .join('-')}.webm`
+
+                  document.body.appendChild(downloadLink)
+
+                  downloadLink.click()
+                }
+              })
+
+              record.addEventListener('click', () => {
+                mediaRecorder.start()
+              })
+
+              stop.addEventListener('click', () => {
+                mediaRecorder.stop()
+              })
+
+              mediaRecorder.addEventListener('start', () => {
+                record.style.setProperty('display', 'none')
+                stop.style.setProperty('display', 'flex')
+                recordingIndicator.style.setProperty('display', 'block')
+                startTime = performance.now()
+                timeInterval = setInterval(() => {
+                  recordingTime.innerHTML = formatTime(
+                    ((performance.now() - startTime) / 1000).toFixed(),
+                  )
+                }, 1000)
+              })
+
+              mediaRecorder.addEventListener('stop', () => {
+                clearInterval(timeInterval)
+                recordingTime.innerHTML = formatTime(0)
+                record.style.setProperty('display', 'flex')
+                stop.style.setProperty('display', 'none')
+                recordingIndicator.style.setProperty('display', 'none')
+              })
+            })
+            .catch(function(error) {
+              console.error(error)
+              if (error.constraint === 'deviceId') {
+                alert('Receiver not connected or permission is not granted.\n' + error.message)
+                return
+              }
+              alert(error.message)
+            })
+        }
+
+        let timeout
+
+        function debounce(callback, delay = 2000) {
+          clearTimeout(timeout)
+          timeout = setTimeout(callback, delay)
+        }
+
+        function hidePageElements() {
+          document.body.style.setProperty('cursor', 'auto')
+          controls.style.setProperty('display', 'block')
+          debounce(() => {
+            document.body.style.setProperty('cursor', 'none')
+            controls.style.setProperty('display', 'none')
+          })
+        }
+
+        function showPageElements() {
+          clearTimeout(timeout)
+          document.body.style.setProperty('cursor', 'auto')
+          controls.style.setProperty('display', 'block')
+        }
+
+        window.addEventListener('dblclick', () => {
+          if (document.fullscreenElement) {
+            document.exitFullscreen()
+          } else {
+            document.body.requestFullscreen()
+            video.play()
+          }
+        })
+        window.addEventListener('mousemove', () => {
+          if (document.fullscreenElement) {
+            hidePageElements()
+          } else {
+            showPageElements()
+          }
+        })
+        window.addEventListener('fullscreenchange', () => {
+          if (document.fullscreenElement) {
+            hidePageElements()
+          } else {
+            showPageElements()
+          }
+        })
+
+
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js').then(function() {
+              console.log('ServiceWorker registered.');
+            }).catch(function(err) {
+              console.log('ServiceWorker registration failed:', err);
+            });
+          });
+        }
+
+      })
+    </script>
+  </body>
+</html>
